@@ -1,2 +1,13 @@
-.env
+# Python cache
 __pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+venv/
+env/
+
+# Editor
+.vscode/
+.idea/
