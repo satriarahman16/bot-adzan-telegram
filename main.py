@@ -2,7 +2,7 @@ import requests
 import os
 from datetime import datetime, timedelta
 
-# --- KONFIGURASI SECRETS ---
+# --- KONFIGURASI SECRETS (Diambil dari GitHub Actions) ---
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
 WEATHER_API_KEY = os.getenv("WEATHER_API_KEY")
@@ -14,16 +14,21 @@ LAT = "-2.5916"
 LON = "140.669"
 
 def kirim_telegram(pesan):
-    if not BOT_TOKEN or not CHAT_ID: return
+    if not BOT_TOKEN or not CHAT_ID:
+        print("Error: Token atau Chat ID tidak ditemukan!")
+        return
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    requests.post(url, data={"chat_id": CHAT_ID, "text": pesan, "parse_mode": "Markdown"})
+    try:
+        requests.post(url, data={"chat_id": CHAT_ID, "text": pesan, "parse_mode": "Markdown"})
+    except Exception as e:
+        print(f"Gagal kirim Telegram: {e}")
 
 def cek_ramalan_cuaca(untuk_jam):
     # Menggunakan API Forecast (Ramalan) 5 hari / 3 jam
     url = f"https://api.openweathermap.org/data/2.5/forecast?lat={LAT}&lon={LON}&appid={WEATHER_API_KEY}&units=metric&lang=id"
     try:
         data = requests.get(url).json()
-        # Ambil ramalan terdekat (indeks 0 biasanya untuk 3 jam ke depan)
+        # Ambil ramalan indeks 0 (biasanya mencakup 3 jam ke depan)
         forecast = data['list'][0]
         temp = forecast['main']['temp']
         deskripsi = forecast['weather'][0]['description']
@@ -32,43 +37,44 @@ def cek_ramalan_cuaca(untuk_jam):
                  f"Untuk jam: *{untuk_jam}:00 WIT*\n\n"
                  f"Kondisi: *{deskripsi.capitalize()}*\n"
                  f"Suhu: {temp}°C\n\n"
-                 f"_(Laporan ini dikirim otomatis 1 jam sebelumnya)_")
+                 f"_(Laporan otomatis dikirim 1 jam sebelumnya)_")
         kirim_telegram(pesan)
     except Exception as e:
-        print(f"Gagal ambil ramalan: {e}")
+        print(f"Gagal ambil ramalan cuaca: {e}")
 
 def ambil_jadwal_sholat():
     url = f"http://api.aladhan.com/v1/timingsByCity?city={KOTA}&country={NEGARA}&method=11"
     try:
         res = requests.get(url).json()
         return res['data']['timings']
-    except: return None
+    except Exception as e:
+        print(f"Gagal ambil jadwal sholat: {e}")
+        return None
 
 def cek_dan_kirim():
     # Waktu Jayapura (UTC+9)
     waktu_skrg = datetime.utcnow() + timedelta(hours=9)
     jam_menit = waktu_skrg.strftime("%H:%M")
+    tanggal_skrg = waktu_skrg.strftime("%d %B %Y")
     
-    # 1. LOGIKA RAMALAN CUACA (Dikirim 1 jam sebelum target)
-    # Target jam 09:00 -> Dikirim jam 08:00
-    # Target jam 16:00 -> Dikirim jam 15:00
-    # Target jam 20:00 -> Dikirim jam 19:00
-    jadwal_kirim = {"08:00": "09", "15:00": "16", "19:00": "20"}
+    print(f"--- Menjalankan Bot ({jam_menit} WIT) ---")
 
-    for pemicu, target in jadwal_kirim.items():
-        # Rentang 5 menit agar tidak terlewat delay GitHub
+    # 1. LAPORAN STATUS PAGI (Jam 05:00 WIT)
+    if "05:00" <= jam_menit <= "05:05":
+        pesan_status = (f"✅ *LAPORAN SISTEM AKTIF*\n"
+                        f"📅 Tanggal: {tanggal_skrg}\n"
+                        f"📍 Lokasi: {KOTA}, Papua\n"
+                        f"🤖 Status: Bot berjalan normal.\n\n"
+                        f"Selamat pagi dan semangat beraktivitas, Satria!")
+        kirim_telegram(pesan_status)
+
+    # 2. RAMALAN CUACA (Dikirim 1 jam sebelum target: 09, 16, 20)
+    jadwal_cuaca = {"08:00": "09", "15:00": "16", "19:00": "20"}
+    for pemicu, target in jadwal_cuaca.items():
         if pemicu <= jam_menit <= (datetime.strptime(pemicu, "%H:%M") + timedelta(minutes=5)).strftime("%H:%M"):
-            marker = f"sent_{target}.txt"
-            if not os.path.exists(marker):
-                cek_ramalan_cuaca(target)
-                with open(marker, "w") as f: f.write("ok")
+            cek_ramalan_cuaca(target)
 
-    # Reset marker setiap tengah malam
-    if jam_menit == "00:00":
-        for target in ["09", "16", "20"]:
-            if os.path.exists(f"sent_{target}.txt"): os.remove(f"sent_{target}.txt")
-
-    # 2. LOGIKA ADZAN (10 menit sebelum)
+    # 3. PENGINGAT ADZAN (Rentang 6-10 menit sebelum)
     jadwal = ambil_jadwal_sholat()
     if not jadwal: return
     
@@ -82,9 +88,15 @@ def cek_dan_kirim():
         
         selisih = (obj_adzan - waktu_skrg).total_seconds() / 60
         
+        # Jika waktu adzan tinggal 6 s/d 10 menit lagi
         if 6 <= selisih <= 10.5:
-            kirim_telegram(f"⏳ *PENGINGAT SHOLAT*\n\nSekitar 10 menit lagi waktu *{nama_indo[s]}* ({waktu_adzan} WIT).")
+            sholat = nama_indo[s]
+            kirim_telegram(f"⏳ *PENGINGAT SHOLAT ({KOTA})*\n\nSekitar 10 menit lagi waktu *{sholat}* ({waktu_adzan} WIT). Mari bersiap-siap!")
+            print(f"Pesan {sholat} terkirim.")
             return
 
 if __name__ == "__main__":
+    # TAMBAHKAN BARIS INI UNTUK TES INSTAN:
+    kirim_telegram("Tes manual: Koneksi ke Telegram dan OpenWeather OK!")
+    cek_ramalan_cuaca("16") # Mengetes fungsi cuaca untuk jam 16
     cek_dan_kirim()
