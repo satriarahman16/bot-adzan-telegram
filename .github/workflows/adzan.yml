@@ -2,21 +2,31 @@ name: Bot Adzan Terjadwal
 
 on:
   schedule:
-    # Berjalan setiap 5 menit
     - cron: '*/5 * * * *'
-  workflow_dispatch: # Supaya bisa ditest manual kapan saja
+  workflow_dispatch:
 
 jobs:
   check_adzan:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+
     steps:
-      - uses: actions/checkout@v4  # Diupdate dari v3 ke v4
+      - name: Checkout Kode
+        uses: actions/checkout@v4
+
       - name: Setup Python
-        uses: actions/setup-python@v5 # Diupdate dari v4 ke v5
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+
       - name: Install Dependencies
-        run: pip install requests
+        run: pip install requests pytz --quiet  # ✅ Tambah pytz!
+
+      - name: Cek Waktu Debug
+        run: |
+          echo "UTC  : $(date -u '+%H:%M')"
+          echo "WIT  : $(TZ='Asia/Jayapura' date '+%H:%M')"
+
       - name: Run Bot
         run: python main.py
         env:
