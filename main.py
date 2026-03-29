@@ -96,7 +96,4 @@ def cek_dan_kirim():
             return
 
 if __name__ == "__main__":
-    # TAMBAHKAN BARIS INI UNTUK TES INSTAN:
-    kirim_telegram("Tes manual: Koneksi ke Telegram dan OpenWeather OK!")
-    cek_ramalan_cuaca("16") # Mengetes fungsi cuaca untuk jam 16
     cek_dan_kirim()
